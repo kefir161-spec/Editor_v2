@@ -1617,6 +1617,11 @@ renderer.outputEncoding = THREE.sRGBEncoding;
         filtered.push(h);
       } else {
         h.__root = h.object;
+        var worldNormal=h.face.normal.clone().applyMatrix3(normalMatrix).normalize();
+        if(worldNormal.dot(ray.direction) <= -1e-4){
+          filtered.push(h);
+        }
+      } else {
         filtered.push(h);
       }
     }
@@ -1657,6 +1662,7 @@ renderer.outputEncoding = THREE.sRGBEncoding;
     });
 
     return deduped;
+    return filtered;
   }
 
   function getHalf(kind){
