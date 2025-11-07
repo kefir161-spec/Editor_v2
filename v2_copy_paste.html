@@ -1564,7 +1564,62 @@ renderer.outputEncoding = THREE.sRGBEncoding;
     raycaster.setFromCamera(v,camera);
     var list=arr||scene.children;
     var hits=raycaster.intersectObjects(list, !!recursive);
+    hits = filterRayHits(hits, raycaster.ray);
     return hits[0]||null;
+  }
+
+  function filterRayHits(hits, ray){
+    if(!hits || !hits.length) return [];
+
+    var filtered=[];
+    var normalMatrix=new THREE.Matrix3();
+    var worldNormal=new THREE.Vector3();
+    var extremePoint=new THREE.Vector3();
+    var deltaVec=new THREE.Vector3();
+    var box=new THREE.Box3();
+    var SURFACE_EPS=1e-3;
+
+    for(var i=0;i<hits.length;i++){
+      var h=hits[i];
+
+      if(h.object===ground){
+        filtered.push(h);
+        continue;
+      }
+
+      if(h.face && h.object && h.object.matrixWorld){
+        normalMatrix.getNormalMatrix(h.object.matrixWorld);
+        worldNormal.copy(h.face.normal).applyMatrix3(normalMatrix).normalize();
+
+        if(worldNormal.dot(ray.direction) > -1e-4){
+          continue;
+        }
+
+        var root=rootOf(h.object);
+        if(root){
+          box.setFromObject(root);
+
+          extremePoint.set(
+            worldNormal.x>=0 ? box.max.x : box.min.x,
+            worldNormal.y>=0 ? box.max.y : box.min.y,
+            worldNormal.z>=0 ? box.max.z : box.min.z
+          );
+
+          deltaVec.copy(h.point).sub(extremePoint);
+          var separation=worldNormal.dot(deltaVec);
+
+          if(separation < -SURFACE_EPS){
+            continue;
+          }
+        }
+
+        filtered.push(h);
+      } else {
+        filtered.push(h);
+      }
+    }
+
+    return filtered;
   }
 
   function getHalf(kind){
@@ -1642,6 +1697,7 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 
     raycaster.setFromCamera(mouse,camera);
     var hits=raycaster.intersectObjects(pickables.concat([ground]),true);
+    hits = filterRayHits(hits, raycaster.ray);
 
     if(!ghost){
       return;
