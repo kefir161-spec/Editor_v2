@@ -1613,13 +1613,50 @@ renderer.outputEncoding = THREE.sRGBEncoding;
           }
         }
 
+        h.__root = root || h.object;
         filtered.push(h);
       } else {
+        h.__root = h.object;
         filtered.push(h);
       }
     }
 
-    return filtered;
+    var bestByRoot={};
+    for(var j=0;j<filtered.length;j++){
+      var fh=filtered[j];
+      var key;
+      if(fh.object===ground){
+        key='__ground';
+      } else if(fh.__root && (fh.__root.uuid || fh.__root.id)){ 
+        key=fh.__root.uuid || fh.__root.id;
+      } else if(fh.object && (fh.object.uuid || fh.object.id)){
+        key=fh.object.uuid || fh.object.id;
+      } else {
+        key='__misc_'+j;
+      }
+
+      var existing=bestByRoot[key];
+      if(!existing || fh.distance < existing.distance - 1e-5){
+        bestByRoot[key]=fh;
+      }
+    }
+
+    var deduped=[];
+    for(var key in bestByRoot){
+      if(bestByRoot.hasOwnProperty(key)){
+        var hit=bestByRoot[key];
+        if(hit.__root){
+          delete hit.__root;
+        }
+        deduped.push(hit);
+      }
+    }
+
+    deduped.sort(function(a,b){
+      return a.distance - b.distance;
+    });
+
+    return deduped;
   }
 
   function getHalf(kind){
