@@ -1573,6 +1573,11 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 
     var filtered=[];
     var normalMatrix=new THREE.Matrix3();
+    var worldNormal=new THREE.Vector3();
+    var extremePoint=new THREE.Vector3();
+    var deltaVec=new THREE.Vector3();
+    var box=new THREE.Box3();
+    var SURFACE_EPS=1e-3;
 
     for(var i=0;i<hits.length;i++){
       var h=hits[i];
@@ -1584,6 +1589,34 @@ renderer.outputEncoding = THREE.sRGBEncoding;
 
       if(h.face && h.object && h.object.matrixWorld){
         normalMatrix.getNormalMatrix(h.object.matrixWorld);
+        worldNormal.copy(h.face.normal).applyMatrix3(normalMatrix).normalize();
+
+        if(worldNormal.dot(ray.direction) > -1e-4){
+          continue;
+        }
+
+        var root=rootOf(h.object);
+        if(root){
+          box.setFromObject(root);
+
+          extremePoint.set(
+            worldNormal.x>=0 ? box.max.x : box.min.x,
+            worldNormal.y>=0 ? box.max.y : box.min.y,
+            worldNormal.z>=0 ? box.max.z : box.min.z
+          );
+
+          deltaVec.copy(h.point).sub(extremePoint);
+          var separation=worldNormal.dot(deltaVec);
+
+          if(separation < -SURFACE_EPS){
+            continue;
+          }
+        }
+
+        h.__root = root || h.object;
+        filtered.push(h);
+      } else {
+        h.__root = h.object;
         var worldNormal=h.face.normal.clone().applyMatrix3(normalMatrix).normalize();
         if(worldNormal.dot(ray.direction) <= -1e-4){
           filtered.push(h);
@@ -1593,6 +1626,42 @@ renderer.outputEncoding = THREE.sRGBEncoding;
       }
     }
 
+    var bestByRoot={};
+    for(var j=0;j<filtered.length;j++){
+      var fh=filtered[j];
+      var key;
+      if(fh.object===ground){
+        key='__ground';
+      } else if(fh.__root && (fh.__root.uuid || fh.__root.id)){ 
+        key=fh.__root.uuid || fh.__root.id;
+      } else if(fh.object && (fh.object.uuid || fh.object.id)){
+        key=fh.object.uuid || fh.object.id;
+      } else {
+        key='__misc_'+j;
+      }
+
+      var existing=bestByRoot[key];
+      if(!existing || fh.distance < existing.distance - 1e-5){
+        bestByRoot[key]=fh;
+      }
+    }
+
+    var deduped=[];
+    for(var key in bestByRoot){
+      if(bestByRoot.hasOwnProperty(key)){
+        var hit=bestByRoot[key];
+        if(hit.__root){
+          delete hit.__root;
+        }
+        deduped.push(hit);
+      }
+    }
+
+    deduped.sort(function(a,b){
+      return a.distance - b.distance;
+    });
+
+    return deduped;
     return filtered;
   }
 
